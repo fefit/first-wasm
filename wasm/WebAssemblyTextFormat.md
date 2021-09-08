@@ -209,7 +209,7 @@ WebAssembly.instantiateStreaming(fetch("add.wasm")).then((obj) => {
 
 外部函数导入作为`wasm`与宿主环境进行交互的另一个重要部分，与`wasm`函数导出一起提供了`wasm`和宿主环境互操作的能力。
 
-示例 2：
+#### 示例 2：
 
 ```wasm
 (module
@@ -242,3 +242,91 @@ WebAssembly.instantiateStreaming(fetch("logger.wasm"), importObject).then(
 关于 `import` 更多的相关语法可以从[官方 import 书写规范](https://webassembly.github.io/spec/core/text/modules.html#imports)中查看。
 
 ### `global` 全局变量
+
+`global` 全局变量提供了 `wasm` 与宿主环境访问或操作同一个变量的能力。
+
+先来看看一个从宿主环境导入到 `wat` 全局变量的例子：
+
+```wasm
+(module
+  ;; 从模块"js"导入名为"global"的全局变量，其类型为i32，`mut`关键字表明该变量值可变（可被修改）
+  ;; 按照import的语法，以下等价于 (import "js" "global" (global $times (mut i32)))
+  (global $times (import "js" "global") (mut i32))
+  ;; 对外导出函数incTimes，每次将$times的值加1
+  (func (export "incTimes")
+     global.get $times
+     i32.const 1
+     i32.add
+     global.set $times
+  )
+)
+```
+
+在浏览器环境下，js 要传递全局变量给 `wasm`，就需要用到 [WebAssembly.Global](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WebAssembly/Global) 对象
+
+```javascript
+// 假设上述wat编译后导出为global.wasm
+const global = new WebAssembly.Global(
+  {
+    value: "i32", // 值类型，i32|i64|f32|f64
+    mutable: true, // 是否可变
+  },
+  0 // 使用第二个参数赋予初始值
+);
+WebAssembly.instantiateStreaming(fetch("global.wasm"), { js: { global } }).then(
+  ({ instance }) => {
+    let i;
+    for (i = 0; i < 10; i++) {
+      instance.exports.incTimes();
+      // global对象上有value属性，可以获取到当前对象的值
+      console.log(global.value);
+    }
+    // 上面循环将依次输出值："1" "2" ... "10"
+    global.value = 100;
+    for (i = 0; i < 10; i++) {
+      instance.exports.incTimes();
+      console.log(global.value);
+    }
+    // 上面循环将依次输出值："101" "102" ... "110"
+  }
+);
+```
+
+再来看一个从 `wat` 内导出到宿主环境的例子。
+
+```wasm
+(module
+  ;; 定义一个全局变量$times，赋予初始值0
+  (global $times (mut i32) (i32.const 0))
+  ;; 导出为 "TIMES"
+  (export "TIMES" (global $times))
+  ;; 对外导出函数incTimes，每次将$times的值加1
+  (func (export "incTimes")
+     global.get $times
+     i32.const 1
+     i32.add
+     global.set $times
+  )
+)
+```
+
+```javascript
+WebAssembly.instantiateStreaming(fetch("global.wasm")).then(({ instance }) => {
+  const { incTimes, TIMES } = instance.exports;
+  // 此时TIMES为WebAssembly.Global的实例，所以仍然需要通过value字段来获取或者设置值
+  console.log(TIMES.value); // 输出"0"
+  for (i = 0; i < 10; i++) {
+    incTimes();
+    console.log(TIMES.value);
+  }
+  // 上面循环将依次输出值："1" "2" ... "10"
+});
+```
+
+### `memory` 内存
+
+在示例 2 中，我们从（宿主环境）浏览器中导入了 `console.log` 方法，但在 `wasm` 中，我们支持的基础数据类型只有四种，在例子中，我们仅能打印出一个数字。在实际代码中，这肯定无法满足要求，因此这四种基础数据类型肯定远远不能满足我们的需求。因此我们需要更多的数据类型支持，这也就是 `memory` 相关指令要做的事情。
+
+在讲 `memory` 内存相关指令之前，先得了解 `linear memory` 的概念，`linear memory`（或者又称作 `flat memory`） 是一种内存虚拟模型，由名字可以很容易联想到，`linear memory` 获取内存地址的方式是线性的，所有的内存地址从最小内存地址到最大内存地址都以线性的方式获取，而没有使用 [Memory segmentation](https://en.wikipedia.org/wiki/Memory_segmentation) 内存分段或者 [Memory paging](https://en.wikipedia.org/wiki/Memory_paging) 内存分页这种虚拟内存处理方式。
+
+与 `memory` 指令关系紧密的指令还包括 `data` 指令，通过它可以往内存中写入一段字符串数据(字符需要预先编码，因为这里字符串保存的字节流都以 8 位保存，字符编码值大于 8 位 (2 \*\* 8 - 1) 的字符都将不能正常展示)。
