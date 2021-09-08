@@ -329,4 +329,49 @@ WebAssembly.instantiateStreaming(fetch("global.wasm")).then(({ instance }) => {
 
 在讲 `memory` 内存相关指令之前，先得了解 `linear memory` 的概念，`linear memory`（或者又称作 `flat memory`） 是一种内存虚拟模型，由名字可以很容易联想到，`linear memory` 获取内存地址的方式是线性的，所有的内存地址从最小内存地址到最大内存地址都以线性的方式获取，而没有使用 [Memory segmentation](https://en.wikipedia.org/wiki/Memory_segmentation) 内存分段或者 [Memory paging](https://en.wikipedia.org/wiki/Memory_paging) 内存分页这种虚拟内存处理方式。
 
-与 `memory` 指令关系紧密的指令还包括 `data` 指令，通过它可以往内存中写入一段字符串数据(字符需要预先编码，因为这里字符串保存的字节流都以 8 位保存，字符编码值大于 8 位 (2 \*\* 8 - 1) 的字符都将不能正常展示)。
+与 `memory` 指令关系紧密的指令还包括 `data` 指令，通过它可以往内存中写入一段字符串数据，当前版本中，字符都是按[utf-8 字符序列](https://webassembly.github.io/spec/core/text/values.html#text-string)来进行编码的，所以对于字符串我们需要进行预先的 utf-8 编码，必要时可以使用本仓库里提供的工具[string 转 utf-8](./stringToUtf8.html)进行编码转换。
+
+现在先来看看它们的基本用法：
+
+```wasm
+(module
+  ;; 为当前模块定义一段内存，其大小为1页（1页的大小为64Kb）
+  ;; 注意目前一个wasm module模块内只能定义一个内存
+  (memory $m1 1)
+  ;; 往内存中写入字符串"Nice"，起始位置INDEX为1，即从第1个字节后开始写入
+  ;; 内存的索引与字符对应为：1: "N" 2: "i" 3: "c" 4: "e"
+  (data (i32.const 1) "Nice")
+  ;; 从内存起始位置0字节开始写入字符串"Hi"，字符串"Hi"占用两个字节
+  ;; 内存的索引与字符对应为：0: "H" 1: "i"
+  ;; 所以这里的索引1与前面的有重叠，将会覆盖上面的 "N"
+  (data (i32.const 0) "Hi")
+  (export "MEMORY" (memory $m1))
+)
+```
+
+```javascript
+// 假设上述的wat编译后的wasm文件名为memory.wasm
+WebAssembly.instantiateStreaming(fetch("memory.wasm")).then(({ instance }) => {
+  const { MEMORY } = instance.exports;
+  // 此时MEMORY为WebAssembly.Memory的实例，可以通过其上的buffer字段获取到一个ArrayBuffer对象
+  const { buffer } = MEMORY;
+  // 由于wat里的字符串都是以8位存储的，所以我们可以通过TypedArray里的Uint8Array来进行处理
+  const data = new Uint8Array(buffer);
+  // 通过使用TextDecoder可以来对buffer进行解码
+  // 这里采用utf-8来进行解码，是因为目前wasm对data存储的字符串数据格式更适合
+  // 且utf-8相对于utf-16/utf-32等编码占用更小的内存空间
+  const decoder = new TextDecoder("utf-8");
+  console.log(decoder.decode(data)); // 输出 "Hiice"
+});
+```
+
+上述示例是从 `wasm` 往宿主环境导出 `memory`，我们也可以从宿主环境导入到 `wasm`。
+
+```wasm
+(module
+  ;; 从名称"js" "mem"导入类型为memory的一段内存，大小为1页64Kb
+  (import "js" "mem" (memory 1))
+  ;; 导入"console" "log" 方法
+  (import "console" "log" (func $log))
+)
+```
