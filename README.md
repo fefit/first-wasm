@@ -1,6 +1,6 @@
-# first-wasm
+# First-Wasm
 
-WebAssembly 的入门指南，主要资料来自 [MDN](https://developer.mozilla.org/en-US/docs/WebAssembly) 及 [WebAssembly 官方网站](https://webassembly.org/)
+WebAssembly 的入门指南，主要资料来自 [MDN](https://developer.mozilla.org/en-US/docs/WebAssembly) 及 [WebAssembly 官方网站](https://webassembly.org/)以及个人对 WebAssembly 的理解。
 
 ## 目录结构
 
@@ -18,4 +18,8 @@ WebAssembly 的入门指南，主要资料来自 [MDN](https://developer.mozilla
 
 - `/wasm`
 
-`WebAssembly` 相关的知识点，主要来自于官方文档的介绍。
+`WebAssembly` 相关的知识点，主要参考自 MDN 文档 及官方文档的介绍。
+
+## 纠错与反馈
+
+由于文章部分内容来自于个人的理解，如果您发现文章中有表述错误、逻辑错误、书写错误，欢迎提[issue](./issues)进行反馈。
