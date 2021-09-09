@@ -27,7 +27,7 @@
 
   其它包括引用类型等 [更多类型的定义范式](https://webassembly.github.io/spec/core/text/types.html) 可以在官网中查看。
 
-- Tools，工具：官方提供了[github:wabt 代码转换工具](https://github.com/WebAssembly/wabt)，下面讲到的示例代码都可以在该工具包提供的[在线示例工具](https://webassembly.github.io/wabt/demo/wat2wasm/)将`wat`的代码转换为`wasm`人代码。
+- Tools，工具：官方提供了[github:wabt 代码转换工具](https://github.com/WebAssembly/wabt)，下面讲到的示例代码都可以在该工具包提供的[在线示例工具](https://webassembly.github.io/wabt/demo/wat2wasm/)将`wat`的代码转换为`wasm`代码。
 
 ### `module` 模块
 
@@ -135,7 +135,7 @@
 
 - 命名函数
 
-上述函数没有命名，也没有导出，在实际使用中没有太大的意义，一般我们都会给函数加上命名，方便导出时使用或者供内部调用。
+上述函数没有命名，也没有导出，如果只是在内部调用，我们只能通过函数静态索引（下标从 0 开始）的方式来进行调用，但如果是手写`wat`代码，这样看起来就非常不直观，所以一般我们都会给函数加上命名，方便导出时使用或者供内部调用（编译成二进制 BinaryFormat 后都只有下标的形式）。
 
 ```wasm
 (module
@@ -329,7 +329,7 @@ WebAssembly.instantiateStreaming(fetch("global.wasm")).then(({ instance }) => {
 
 在讲 `memory` 内存相关指令之前，先得了解 `linear memory` 的概念，`linear memory`（或者又称作 `flat memory`） 是一种内存虚拟模型，由名字可以很容易联想到，`linear memory` 获取内存地址的方式是线性的，所有的内存地址从最小内存地址到最大内存地址都以线性的方式获取，而没有使用 [Memory segmentation](https://en.wikipedia.org/wiki/Memory_segmentation) 内存分段或者 [Memory paging](https://en.wikipedia.org/wiki/Memory_paging) 内存分页这种虚拟内存处理方式。
 
-与 `memory` 指令关系紧密的指令还包括 `data` 指令，通过它可以往内存中写入一段字符串数据，当前版本中，字符都是按[utf-8 字符序列](https://webassembly.github.io/spec/core/text/values.html#text-string)来进行编码的，所以对于字符串我们需要进行预先的 utf-8 编码，必要时可以使用本仓库里提供的工具[string 转 utf-8](./stringToUtf8.html)进行编码转换。
+与 `memory` 指令关系紧密的指令还包括 `data` 指令，通过它可以往内存中写入一段字符串数据，当前版本中，字符都是按[utf-8 字符序列](https://webassembly.github.io/spec/core/text/values.html#text-string)来进行编码的，所以对于字符串我们需要进行预先的 utf-8 编码，必要时可以使用本仓库里提供的工具[string 转 utf-8](./stringToUtf8.html)进行编码转换。需要注意的是，`data` 指令不能用在 `func` 函数体内，也不能动态指定内存的索引位置，所以如果需要动态处理字符串数据或者其它非四种基本类型的其它衍生数据，只能通过
 
 现在先来看看它们的基本用法：
 
@@ -374,4 +374,77 @@ WebAssembly.instantiateStreaming(fetch("memory.wasm")).then(({ instance }) => {
   ;; 导入"console" "log" 方法
   (import "console" "log" (func $log))
 )
+```
+
+### `table` 表
+
+在 js 以及很多其它语言(如 c/c++,rust)中，函数都是一等公民，能以指针的形式作为参数传递、充当数组成员等，总之如果函数具有相同的签名，就能进行动态调用。对于这种需要运行时动态调用的函数，我们无法简单通过上面所说的 `call` 指令来简单执行调用。
+
+在 `call` 指令中，`wasm` 最终都是通过指令后面指定的函数的静态索引值来进行调用的。如果要支持动态调用，那这个索引值也只能变成动态的，但如果这个动态可变的索引值是任意可设的值、不能被限制在 `wasm` 自身之内，就会带来以下混乱：
+
+1. 无法事先验证索引指向的被调用函数是否存在、签名是否正确
+
+2. 即便最终指定的被调用函数签名符合，这个函数也可能不在指定的动态可调用函数集合（不管是单个或多个）内，这将带来极大的安全问题
+
+另一种可能的方案就如 `MDN` [文档](https://developer.mozilla.org/en-US/docs/WebAssembly/Understanding_the_text_format#webassembly_tables) 中所说，可以在 `wasm` 中定义一个 `anyfunc` 的类型（注：这个类型在 wasm 真实存在，不过在最新版本中被改成了`funcref`，更符合语义），可以用来表示任何签名的函数，然后我们将函数的指针值保存到 `Memory` 线性内存中，保存后同时得到的可能还包括线性内存的起始位置等，这样在动态调用时，我们就能根据调用时传递的索引位置在线性内存中查找到实际应该对应的函数，然后再进行调用。这在逻辑上看上去像是可行的，但从安全方面出发，这种方案就很难被接受。`Memory` 线性内存可能由宿主环境提供，又或者导出给了宿主环境，因此对于宿主环境（比如浏览器）相当于是完全透明的。这样我们保存在 `Memory` 中的函数指针对外也是完全透明的，我们可以在宿主环境中获取它、甚至篡改它，这肯定是不被允许的。
+
+综合上述，`wasm` 的实现方案是，`call` 的指令仍然通过直接调用函数的静态索引值保持不变，新增加了一个指令 `call_indirect` (顾名思义，间接调用)，然后将要调用的动态函数列表放入 `table` 表中，然后通过保存在 `table` 表中的索引来获取到要调用的函数。
+
+还是来看一个例子比较容易理解一点：
+
+```wasm
+(module
+  ;; 定义一个初始大小为2，类型为funcref的表
+  ;; 意思是该表能存放2个函数引用
+  ;; table 2 3 funcref 这表示初始大小为2，最大为3，通常两者是一致的，除非需要在外部控制table的大小
+  ;; 注意目前wasm的规范下一个模块只能定义1个table，这和memory类似
+  (table 2 funcref)
+  ;; 通过 elem 定义存放在表中的元素
+  ;; (i32.const 0) 表示从下标0的位置开始存放
+  ;; table-elem的指令组合，与memory-data的指令组合非常相似
+  (elem (i32.const 0) $add $sub)
+  ;; 定义一个type类型，将在call_indirect指令中作为类型签名验证
+  (type $calc_type (func (param i32 i32) (result i32)))
+  ;; 定义其中的一个函数，两数相加
+  (func $add (param i32 i32) (result i32)
+     local.get 0
+     local.get 1
+     i32.add
+  )
+  ;; 定义另一个函数，两数相减
+  (func $sub (param i32 i32) (result i32)
+     local.get 0
+     local.get 1
+     i32.sub
+  )
+  ;; 定义最终导出的支持动态调用的函数
+  ;; 它接受三个参数，第一个参数表示要调用的动态函数保存在table中的下标
+  ;; 这里就是 0: $add 1: $sub
+  ;; 剩余的参数是调用函数时要传入的参数
+  (func (export "calc") (param i32 i32 i32) (result i32)
+     local.get 1
+     local.get 2
+     ;; 注意这里最后导入的参数
+     local.get 0
+     call_indirect (type $calc_type)
+  )
+)
+```
+
+```javascript
+// 假设上述的wat编译后的wasm文件名为table.wasm
+WebAssembly.instantiateStreaming(fetch("table.wasm")).then(({ instance }) => {
+  const { calc } = instance.exports;
+  const execute = (method, a, b) => {
+    switch (method) {
+      case "sub":
+        return calc(1, a, b);
+      case "add":
+      default:
+        return calc(0, a, b);
+    }
+  };
+  console.log(execute("add", 2, 1)); // "3"
+  console.log(execute("sub", 2, 1)); // "1"
+});
 ```
