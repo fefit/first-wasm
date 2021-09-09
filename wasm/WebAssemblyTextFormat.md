@@ -342,7 +342,7 @@ WebAssembly.instantiateStreaming(fetch("global.wasm")).then(({ instance }) => {
   ;; 内存的索引与字符对应为：1: "N" 2: "i" 3: "c" 4: "e"
   (data (i32.const 1) "Nice")
   ;; 从内存起始位置0字节开始写入字符串"Hi"，字符串"Hi"占用两个字节
-  ;; 内存的索引与字符对应为：0: "H" 1: "i"
+  ;; 内存的索引与字符对应为：0: "H" 1: "i"
   ;; 所以这里的索引1与前面的有重叠，将会覆盖上面的 "N"
   (data (i32.const 0) "Hi")
   (export "MEMORY" (memory $m1))
@@ -447,4 +447,66 @@ WebAssembly.instantiateStreaming(fetch("table.wasm")).then(({ instance }) => {
   console.log(execute("add", 2, 1)); // "3"
   console.log(execute("sub", 2, 1)); // "1"
 });
+```
+
+以上例子展示了 `table` 的基本用法，实际上我们在浏览器环境中，我们还可以通过 [WebAssembly.Table](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WebAssembly/Table) 对象创建一个 `table` 然后导入到 `wasm` 中。
+
+```wasm
+(module
+  ;; 从名为"js" "table"中导入table，table的类型为函数引用，初始大小为1，即只能保存1个函数引用
+	(import "js" "table" (table 1 funcref))
+  ;; 定义名为$call_type的函数类型
+	(type $call_type (func (param i32) (result i32)))
+  ;; 定义两个导出函数，签名需要符合类型$call_type
+  ;; 注意在宿主环境中，对table的set操作只能是wasm内导出的函数
+  (func (export "add100") (param i32) (result i32)
+      local.get 0
+      i32.const 100
+      i32.add
+  )
+  (func (export "sub100") (param i32) (result i32)
+      local.get 0
+      i32.const 100
+      i32.sub
+  )
+  ;; 定义一个执行函数，函数第一个参数为函数在table中的索引值
+  ;; 第二个参数为传递到动态函数中的实际第一个参数
+  (func (export "exec") (param i32 i32)  (result i32)
+      (call_indirect (type $call_type) (local.get 1) (local.get 0) )
+  )
+)
+```
+
+```javascript
+// 定义一个初始大小为1的table
+const table = new WebAssembly.Table({
+  initial: 1,
+  element: "funcref",
+});
+const importObj = {
+  js: {
+    table,
+  },
+};
+// 假设上述的wat编译后的wasm文件名为table.wasm
+WebAssembly.instantiateStreaming(fetch("table.wasm"), importObj).then(
+  ({ instance }) => {
+    const { exec, add100, sub100 } = instance.exports;
+    // 设置table的第一个函数为
+    table.set(0, add100);
+    for (let i = 0; i < 10; i++) {
+      console.log(exec(0, i));
+    }
+    // 以上将输出100到109
+    // console.log(exec(1, 100)); // 这里将报错，因为table的大小为1，只能保存一个函数，索引1超过了它的范围
+    // table.set(1, sub100); // 这里也将报错，set操作的索引值也必须在table的范围之内
+    // 正确的方式是先通过grow来增长table的大小
+    table.grow(1);
+    table.set(1, sub100);
+    for (let i = 0; i < 10; i++) {
+      console.log(exec(1, i));
+    }
+    // 以上将输出-100 到 -91
+  }
+);
 ```

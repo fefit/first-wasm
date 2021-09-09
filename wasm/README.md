@@ -53,5 +53,6 @@ A: `Wasm` 依赖两个规范标准：
 
 - Unicode，Unicode编码规范，主要是用在名称及文本表达格式上。
 
+## 文档导航
 
-
+- [WebAssembly文本格式详解](./WebAssemblyTextFormat.md)
