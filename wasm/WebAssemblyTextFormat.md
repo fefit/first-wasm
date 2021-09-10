@@ -329,7 +329,7 @@ WebAssembly.instantiateStreaming(fetch("global.wasm")).then(({ instance }) => {
 
 在讲 `memory` 内存相关指令之前，先得了解 `linear memory` 的概念，`linear memory`（或者又称作 `flat memory`） 是一种内存虚拟模型，由名字可以很容易联想到，`linear memory` 获取内存地址的方式是线性的，所有的内存地址从最小内存地址到最大内存地址都以线性的方式获取，而没有使用 [Memory segmentation](https://en.wikipedia.org/wiki/Memory_segmentation) 内存分段或者 [Memory paging](https://en.wikipedia.org/wiki/Memory_paging) 内存分页这种虚拟内存处理方式。
 
-与 `memory` 指令关系紧密的指令还包括 `data` 指令，通过它可以往内存中写入一段字符串数据，当前版本中，字符都是按[utf-8 字符序列](https://webassembly.github.io/spec/core/text/values.html#text-string)来进行编码的，所以对于字符串我们需要进行预先的 utf-8 编码，必要时可以使用本仓库里提供的工具[string 转 utf-8](./stringToUtf8.html)进行编码转换。需要注意的是，`data` 指令不能用在 `func` 函数体内，也不能动态指定内存的索引位置，所以如果需要动态处理字符串数据或者其它非四种基本类型的其它衍生数据，只能通过
+与 `memory` 指令关系紧密的指令还包括 `data` 指令，通过它可以往内存中写入一段字符串数据，当前版本中，字符都是按[utf-8 字符序列](https://webassembly.github.io/spec/core/text/values.html#text-string)来进行编码的，所以对于字符串我们需要进行预先的 utf-8 编码，必要时可以使用本仓库里提供的工具[string 转 utf-8](./stringToUtf8.html)进行编码转换。需要注意的是，`data` 指令不能用在 `func` 函数体内，也不能动态指定内存的索引起始位置，所以如果需要动态处理字符串数据等，只能通过其它方式来实现。
 
 现在先来看看它们的基本用法：
 
@@ -365,7 +365,38 @@ WebAssembly.instantiateStreaming(fetch("memory.wasm")).then(({ instance }) => {
 });
 ```
 
-上述示例是从 `wasm` 往宿主环境导出 `memory`，我们也可以从宿主环境导入到 `wasm`。
+上述示例是从 `wasm` 往宿主环境导出 `memory`，我们也可以从宿主环境导入到 `wasm`。在浏览器中，我们使用 [WebAssembly.Memory](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WebAssembly/Memory) 对象来创建一个 `Memory`。
+
+```javascript
+const memory = new WebAssembly.Memory({
+  initial: 1, // 初始为1页大小，也即64Kb
+  maximum: 10, // 最大为10页，也即640Kb
+  // 如果要支持wasm的threads多线程，需要设置shared: true
+  // 这样memory将生成 SharedArrayBuffer 而不是 ArrayBuffer
+  // shared: true
+});
+const consoleLogString = (offset, length) => {
+  const bytes = new Uint8Array(memory.buffer, offset, length);
+  const string = new TextDecoder("utf8").decode(bytes);
+  console.log(string);
+};
+const importObj = {
+  js: {
+    memory,
+  },
+  console: {
+    log: consoleLogString,
+  },
+};
+
+// 假设wat编译后的wasm文件名为memory.wasm
+WebAssembly.instantiateStreaming(fetch("memory.wasm"), importObj).then(
+  ({ instance }) => {
+    const { writeHi } = instance.exports;
+    writeHi(); // 输出 "Hi"
+  }
+);
+```
 
 ```wasm
 (module
@@ -373,6 +404,12 @@ WebAssembly.instantiateStreaming(fetch("memory.wasm")).then(({ instance }) => {
   (import "js" "mem" (memory 1))
   ;; 导入"console" "log" 方法
   (import "console" "log" (func $log))
+  ;; 往内存里写入"Hi"字符串
+  (data (i32.const 0) "Hi")
+  (func (export "writeHi")
+    i32.const 0  ;; 内存的起始位置，以字节为单位
+    i32.const 2  ;; 长度，即占用的字节数，这里即字符串 "Hi" 的字节数
+    call $log))
 )
 ```
 
@@ -422,9 +459,11 @@ WebAssembly.instantiateStreaming(fetch("memory.wasm")).then(({ instance }) => {
   ;; 这里就是 0: $add 1: $sub
   ;; 剩余的参数是调用函数时要传入的参数
   (func (export "calc") (param i32 i32 i32) (result i32)
+     ;; 注意这里导入参数的顺序，最后入栈的是函数在table中的索引值
+     ;; 等价于 (call_indirect (type $calc_type) (local.get 1) (local.get 2) (local.get 0))
+     ;; 上面写法的位置顺序和入栈的顺序保持一致，其它指令的简写写法也一样
      local.get 1
      local.get 2
-     ;; 注意这里最后导入的参数
      local.get 0
      call_indirect (type $calc_type)
   )
