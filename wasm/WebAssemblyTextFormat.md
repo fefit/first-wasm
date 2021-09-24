@@ -635,3 +635,52 @@ WebAssembly.instantiateStreaming(fetch("block.wasm"), importObj).then(
 ```
 
 上面两个 `block` 示例所实现的功能完全一样，但后面的示例与跳转指令相配合才是 `block` 的常规操作。
+
+### `if` 指令
+
+`if` 指令从栈中取出一个值(类型必须是`i32`，`br_if`等需要判断值是否为 0 的指令也类似)，当值为 0 时，条件不成立，`if` 内的指令不会被执行，如果有 `else` 的分支的话，将执行 `else` 内的指令；当值不为 0 时，执行 `if` 内的指令。和 `block` 类似，如果 `if` 自身有返回值，需要在 `if` 后加上返回值，使用返回值时，`else` 分支的返回值和 `if` 的返回值必须保持一致。
+
+```wasm
+(module
+  (;和上面block使用的示例一样，从math random导入为random函数;)
+  (import "math" "random" (func $random (result f32)))
+  ;; 同样，该函数根据随机数的大小，大于等于0.5则返回1，否则返回0
+  (func (export "isOptional") (result i32)
+   	;; 往栈中压入一个0到1的随机浮点数
+    call $random
+    ;; 继续往栈中压入浮点
+    f32.const 0.5
+    f32.lt
+    ;;
+    if (result i32)
+    	i32.const 0
+    else
+    	i32.const 1
+    end
+  )
+)
+```
+
+上面的 `if` 语句如果以 S 表达式的方式书写，需要稍微注意一下书写的语法，`if` 条件为真的情况下指令必须写在关键字 `then` 之后。
+
+```wasm
+(module
+  (;和上面block使用的示例一样，从math random导入为random函数;)
+  (import "math" "random" (func $random (result f32)))
+  ;; 同样，该函数根据随机数的大小，大于等于0.5则返回1，否则返回0
+  (func (export "isOptional") (result i32)
+    ;; 这里使用了`block`与if的条件判断进行配合
+   	(if (result i32) (block (result i32)
+          (f32.lt
+            (call $random)
+            (f32.const 0.5)
+          )
+      )
+      (then i32.const 0) ;; 这里必须使用`then`关键字，if条件为true时执行
+      (else i32.const 1) ;; 显然，`then`和`else`不能交换位置
+    )
+  )
+)
+```
+
+因为该示例与上面的 block 示例一致， js 代码就不再重复版述了。
