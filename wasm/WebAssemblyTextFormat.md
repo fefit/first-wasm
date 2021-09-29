@@ -556,8 +556,8 @@ WebAssembly.instantiateStreaming(fetch("table.wasm"), importObj).then(
 
 这些块级指令主要包括：
 
-- 条件：`if`，以及对应的分支 `else`，又或者 `if` 后带有条件的写法 `if <condition> (then xxx) (else xxx)`。
 - 块：`block`
+- 条件：`if`，以及对应的分支 `else`，又或者 `if` 后带有条件的写法 `if <condition> (then xxx) (else xxx)`
 - 循环：`loop`
 
 所有的区块指令都以 `end` 标识符作为区块的结束，区块指令后面也都可以后接 `id` 名为区块进行命名，以及 `(result type)` 表示区块的返回值，如果有 `result`，则最终区块的栈内应不为空，栈内的数据与 `result` 标示的类型、数量(如果 wasm 支持了多返回值的情况下)保持一致。注意这里特意说的`区块的栈`，这是因为区块指令都会开辟自己的栈，使其与函数体的栈或其它区块相隔离，这样区块就表现得与独立函数一样，可以层层嵌套。
@@ -570,7 +570,7 @@ WebAssembly.instantiateStreaming(fetch("table.wasm"), importObj).then(
 - `br_if` 和 `br` 一样，不过 `br_if` 会从它所属的区块堆栈中取出一个值，如果值不为 0 才进行跳转。
 - `br_table` 和上面的 `table` 指令类似，`br_table` 后面可接多个块名参数（从 0 开始索引），然后从堆栈中取出一个索引值，匹配到对应参数、然后跳转到参数所指向的块名。
 
-实际上，像 `loop` 指令，如果没有这些跳转指令，我们就没法实现循环，所谓循环，无非就是<循环体>代码执行一遍后，再跳到循环代码块的开头部分，如此往复直至达到条件跳出循环。所以，大部分时候区块指令必须搭配跳转指令才能实现它所要实现的代码逻辑。另外，跳转指令都具备让代码执行跳转到某一个区块之外的能力，这里的`之外`的意思是，它会跳转到对应的区块指令的 `end` 之后再继续执行，而不会再执行它（跳转指令）之后的其它指令。
+实际上，像 `loop` 指令，如果没有这些跳转指令，我们就没法实现循环，所谓循环，无非就是<循环体>代码执行一遍后，再跳到循环代码块的开头部分，如此往复直至达到条件跳出循环。所以，大部分时候区块指令必须搭配跳转指令才能实现它所要实现的代码逻辑。另外，跳转指令都具备让代码执行跳转到某个位置的能力，除了 `loop` 是跳转回 `loop` 所在开头位置，其它都会跳转到区块之外，这里的`之外`的意思是，它会跳转到对应区块的对应 `end` 之后再继续执行，而不会再执行它（跳转指令）之后的其它指令。
 
 ### `block` 指令
 
@@ -684,3 +684,46 @@ WebAssembly.instantiateStreaming(fetch("block.wasm"), importObj).then(
 ```
 
 因为该示例与上面的 block 示例一致， js 代码就不再重复版述了。
+
+### `loop` 指令
+
+上面已经提到，`loop` 指令和其它区块指令有一点不同，就是跳转指令与它配合使用时，会跳转至 `loop` 区块的开头部分，正因如此，`loop` 指令才得以可以实现循环的效果。
+
+```wasm
+(module
+  (func (export "factorial") (param $end i32) (result i32) (local $start i32) (local $total i32)
+    ;; 设置阶乘起始值$start为1
+    (local.set $start (i32.const 1))
+    ;; 设置阶乘初始结果为1
+    (local.set $total (i32.const 1))
+    ;; 开始循环
+    loop $l
+      ;; 判断$start < $end，结果为1(true)才进入if区块代码
+      (i32.lt_s (local.get $start) (local.get $end))
+      ;; if内的代码即为循环体代码
+      if
+        ;; 将$start增加1
+        (local.set $start (i32.add (local.get $start) (i32.const 1)))
+        ;; 将$total乘以$start，实现阶乘
+        (local.set $total (i32.mul (local.get $total) (local.get $start)))
+        ;; 跳转回循环开头
+        br $l
+      end
+    end
+    ;;返回$total结果
+    local.get $total
+  )
+)
+```
+
+对应的 js 调用代码如下：
+
+```javascript
+// 假设上述的wat编译后的wasm文件名为loop.wasm
+WebAssembly.instantiateStreaming(fetch("loop.wasm")).then(({ instance }) => {
+  const { factorial } = instance.exports;
+  for (let i = 1; i < 10; i++) {
+    console.log(factorial(i)); // 依次输出1、2、6、24、....
+  }
+});
+```
