@@ -4,19 +4,19 @@ WebAssembly 的入门指南，主要资料来自 [MDN](https://developer.mozilla
 
 ## 目录结构
 
-- [/c](./c/READEME.md)
+- [/c](./c/README.md)
 
 `C/C++` 如何使用 `Wasm`，并提供了示例教程。
 
-- [/rust](./rust/READEME.md)
+- [/rust](./rust/README.md)
 
 `Rust` 如何使用 `Wasm`，并提供了示例教程。
 
-- [/assemblyscript](./assemblyscript/READEME.md)
+- [/assemblyscript](./assemblyscript/README.md)
 
 `AssemblyScript` 如何使用 `Wasm`，并提供了示例教程。
 
-- [/wasm](./wasm/READEME.md)
+- [/wasm](./wasm/README.md)
 
 `WebAssembly` 相关的知识点，主要参考自 MDN 文档 及官方文档的介绍。
 
