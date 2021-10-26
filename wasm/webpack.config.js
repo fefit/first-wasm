@@ -5,15 +5,15 @@ const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const resolve = (curPath) => path.resolve(__dirname, curPath);
 const jsExtName = '.js';
-const tmplExtName = '.html';
 const { htmlWebpackPlugins, entry } = (() => {
   const files = glob.sync(resolve(`src/js/*${jsExtName}`));
   const template = resolve('src/template/index.html');
   const entry = {};
   const htmlWebpackPlugins = files.map((file) => {
-    const name = path.basename(file, tmplExtName);
+    const name = path.basename(file, jsExtName);
+    entry[name] = file;
     return new HtmlWebpackPlugin({
-      chunks: ['common', name],
+      chunks: [name],
       template,
       filename: resolve(`examples/${name}.html`),
       inject: true
@@ -43,27 +43,14 @@ module.exports = {
       use: [{
         loader: 'babel-loader'
       }]
-    }, {
+    },{
       test: /\.wast$/,
       loader: "wast-loader",
-      type: "webassembly/experimental"
+      type: "webassembly/async"
     }]
   },
-  optimization: {
-    splitChunks: {
-      chunks: 'all',
-      minSize: 30000,
-      minChunks: 1,
-      maxAsyncRequests: 5,
-      maxInitialRequests: 3,
-      name: true,
-      cacheGroups: {
-        common: {
-          name: 'common',
-          chunks: 'initial',
-          minChunks: 2,
-        }
-      }
-    }
+  experiments: {
+    asyncWebAssembly: true,
+    topLevelAwait: true,
   }
 };
