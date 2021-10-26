@@ -1,0 +1,17 @@
+{
+  "name": "first-wasm",
+  "version": "0.0.1",
+  "main": "index.js",
+  "scripts": {
+    "start": "webpack --mode=development"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "babel-loader": "^8.2.3",
+    "clean-webpack-plugin": "^4.0.0",
+    "html-webpack-plugin": "^5.5.0",
+    "wast-loader": "^1.11.1",
+    "webpack": "^5.60.0",
+    "webpack-cli": "^4.9.1"
+  }
+}
