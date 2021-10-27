@@ -16,7 +16,8 @@ const { htmlWebpackPlugins, entry } = (() => {
       chunks: [name],
       template,
       filename: resolve(`examples/${name}.html`),
-      inject: true
+      inject: true,
+      title: `${name}示例页面`
     });
   });
   return { entry, htmlWebpackPlugins }
@@ -30,10 +31,10 @@ module.exports = {
     publicPath: '/dist/'
   },
   plugins: [
-    new CleanWebpackPlugin({
-      dry: false,
-      verbose: true
-    }),
+    // new CleanWebpackPlugin({
+    //   dry: false,
+    //   verbose: true
+    // }),
     ...htmlWebpackPlugins
   ],
   module: {
@@ -43,7 +44,7 @@ module.exports = {
       use: [{
         loader: 'babel-loader'
       }]
-    },{
+    }, {
       test: /\.wast$/,
       loader: "wast-loader",
       type: "webassembly/async"
